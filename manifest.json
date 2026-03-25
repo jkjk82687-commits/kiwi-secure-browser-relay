@@ -1,14 +1,14 @@
 {
-  \"manifest_version\": 2,
-  \"name\": \"Kiwi Secure Browser Relay\",
-  \"version\": \"1.1.1\",
-  \"description\": \"Hardened privacy-first relay by Kiwi Technology.\",
-  \"permissions\": [\"tabs\", \"activeTab\", \"storage\"],
-  \"browser_action\": {
-    \"default_popup\": \"popup.html\"
+  "manifest_version": 2,
+  "name": "Kiwi Secure Browser Relay",
+  "version": "1.2.0",
+  "description": "Hardened privacy-first relay by Kiwi Technology.",
+  "permissions": ["tabs", "activeTab", "storage"],
+  "browser_action": {
+    "default_popup": "popup.html"
   },
-  \"background\": {
-    \"scripts\": [\"background.js\"],
-    \"persistent\": false
+  "background": {
+    "scripts": ["background.js"],
+    "persistent": false
   }
 }
