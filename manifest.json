@@ -1,15 +1,14 @@
 {
-  \"manifest_version\": 3,
-  \"name\": \"Kiwi Secure Browser Relay for OpenClaw\",
-  \"version\": \"1.0.0\",
-  \"description\": \"Hardened, privacy-first browser relay for OpenClaw by Shenzhen Kiwi Technology Co., Ltd.\",
-  \"permissions\": [\"tabs\", \"activeTab\", \"storage\", \"scripting\"],
-  \"host_permissions\": [\"<all_urls>\"],
-  \"background\": {
-    \"service_worker\": \"background.js\"
+  \"manifest_version\": 2,
+  \"name\": \"Kiwi Secure Browser Relay\",
+  \"version\": \"1.1.1\",
+  \"description\": \"Hardened privacy-first relay by Kiwi Technology.\",
+  \"permissions\": [\"tabs\", \"activeTab\", \"storage\"],
+  \"browser_action\": {
+    \"default_popup\": \"popup.html\"
   },
-  \"action\": {
-    \"default_popup\": \"popup.html\",
-    \"default_title\": \"Kiwi Secure Relay\"
+  \"background\": {
+    \"scripts\": [\"background.js\"],
+    \"persistent\": false
   }
 }
