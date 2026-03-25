@@ -1,14 +1,10 @@
 {
-  "manifest_version": 2,
-  "name": "Kiwi Secure Browser Relay",
-  "version": "1.2.0",
-  "description": "Hardened privacy-first relay by Kiwi Technology.",
-  "permissions": ["tabs", "activeTab", "storage"],
-  "browser_action": {
+  "manifest_version": 3,
+  "name": "Kiwi Secure Relay",
+  "version": "1.3.0",
+  "description": "Secure OpenClaw relay by Kiwi Technology.",
+  "permissions": ["tabs", "activeTab"],
+  "action": {
     "default_popup": "popup.html"
-  },
-  "background": {
-    "scripts": ["background.js"],
-    "persistent": false
   }
 }
