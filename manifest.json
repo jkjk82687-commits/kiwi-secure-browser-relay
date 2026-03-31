@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Kiwi Secure Relay",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "Secure OpenClaw relay by Kiwi Technology - connects to VPS relay server.",
   "permissions": ["tabs", "activeTab", "storage", "debugger"],
   "host_permissions": ["*://93.127.213.22/*"],

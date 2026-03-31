@@ -1,4 +1,4 @@
-// Kiwi Secure Relay - Popup Script
+// Kiwi Secure Relay - Popup Script (v1.4.1)
 
 const attachBtn = document.getElementById('attachBtn');
 const detachBtn = document.getElementById('detachBtn');
@@ -21,56 +21,82 @@ function updateUI(status) {
 
 // Check current status
 function checkStatus() {
-  chrome.runtime.sendMessage({ action: 'status' }, (response) => {
-    if (chrome.runtime.lastError) {
-      statusDiv.textContent = '⚠ Extension error';
-      statusDiv.className = 'status-error';
-      return;
-    }
-    updateUI(response || { attached: false, connected: false });
-  });
+  try {
+    chrome.runtime.sendMessage({ action: 'status' }, (response) => {
+      if (chrome.runtime.lastError) {
+        console.error('Status check error:', chrome.runtime.lastError);
+        statusDiv.textContent = '⚠ Background not ready';
+        statusDiv.className = 'status-error';
+        return;
+      }
+      updateUI(response || { attached: false, connected: false });
+    });
+  } catch (err) {
+    statusDiv.textContent = '⚠ ' + err.message;
+    statusDiv.className = 'status-error';
+  }
 }
 
 // Attach button handler
 attachBtn.addEventListener('click', () => {
   attachBtn.disabled = true;
-  statusDiv.textContent = 'Connecting...';
+  statusDiv.textContent = '⏳ Connecting...';
+  statusDiv.className = '';
   
-  chrome.runtime.sendMessage({ action: 'attach' }, (response) => {
+  try {
+    chrome.runtime.sendMessage({ action: 'attach' }, (response) => {
+      attachBtn.disabled = false;
+      
+      if (chrome.runtime.lastError) {
+        console.error('Attach error:', chrome.runtime.lastError);
+        statusDiv.textContent = '⚠ ' + chrome.runtime.lastError.message;
+        statusDiv.className = 'status-error';
+        return;
+      }
+      
+      console.log('Attach response:', response);
+      
+      if (response && response.success) {
+        statusDiv.textContent = '✓ Attached to tab';
+        statusDiv.className = 'status-attached';
+        attachBtn.style.display = 'none';
+        detachBtn.style.display = 'inline-block';
+      } else {
+        const errorMsg = response?.error || 'Unknown error';
+        statusDiv.textContent = '⚠ ' + errorMsg;
+        statusDiv.className = 'status-error';
+        console.error('Attach failed:', errorMsg);
+      }
+    });
+  } catch (err) {
     attachBtn.disabled = false;
-    
-    if (chrome.runtime.lastError) {
-      statusDiv.textContent = '⚠ ' + chrome.runtime.lastError.message;
-      statusDiv.className = 'status-error';
-      return;
-    }
-    
-    if (response?.success) {
-      statusDiv.textContent = '✓ Attached to tab';
-      statusDiv.className = 'status-attached';
-      attachBtn.style.display = 'none';
-      detachBtn.style.display = 'inline-block';
-    } else {
-      statusDiv.textContent = '⚠ ' + (response?.error || 'Unknown error');
-      statusDiv.className = 'status-error';
-    }
-  });
+    statusDiv.textContent = '⚠ ' + err.message;
+    statusDiv.className = 'status-error';
+  }
 });
 
 // Detach button handler
 detachBtn.addEventListener('click', () => {
   detachBtn.disabled = true;
   
-  chrome.runtime.sendMessage({ action: 'detach' }, (response) => {
-    detachBtn.disabled = false;
-    
-    if (response?.success) {
+  try {
+    chrome.runtime.sendMessage({ action: 'detach' }, (response) => {
+      detachBtn.disabled = false;
+      
+      if (chrome.runtime.lastError) {
+        console.error('Detach error:', chrome.runtime.lastError);
+      }
+      
       statusDiv.textContent = 'Disconnected';
       statusDiv.className = '';
       attachBtn.style.display = 'inline-block';
       detachBtn.style.display = 'none';
-    }
-  });
+    });
+  } catch (err) {
+    detachBtn.disabled = false;
+    statusDiv.textContent = '⚠ ' + err.message;
+    statusDiv.className = 'status-error';
+  }
 });
 
 // Initial status check
