@@ -1,85 +1,77 @@
 // Kiwi Secure Relay - Popup Script
 
-const btnAttach = document.getElementById('btn-attach');
-const btnDetach = document.getElementById('btn-detach');
-const connectionStatus = document.getElementById('connection-status');
-const tabStatus = document.getElementById('tab-status');
-const messageDiv = document.getElementById('message');
+const attachBtn = document.getElementById('attachBtn');
+const detachBtn = document.getElementById('detachBtn');
+const statusDiv = document.getElementById('status');
 
-function showMessage(text, type) {
-  messageDiv.textContent = text;
-  messageDiv.className = `message ${type}`;
-}
-
-function hideMessage() {
-  messageDiv.className = 'message hidden';
-}
-
-async function updateStatus() {
-  const response = await chrome.runtime.sendMessage({ action: 'getStatus' });
-  
-  // Update connection status
-  if (response.connected) {
-    connectionStatus.textContent = 'Connected';
-    connectionStatus.className = 'status-value connected';
+// Update UI based on status
+function updateUI(status) {
+  if (status.attached) {
+    attachBtn.style.display = 'none';
+    detachBtn.style.display = 'inline-block';
+    statusDiv.textContent = '✓ Attached to tab';
+    statusDiv.className = 'status-attached';
   } else {
-    connectionStatus.textContent = 'Disconnected';
-    connectionStatus.className = 'status-value disconnected';
-  }
-  
-  // Update tab status
-  if (response.tabAttached) {
-    tabStatus.textContent = 'Attached';
-    tabStatus.className = 'status-value connected';
-    btnAttach.classList.add('hidden');
-    btnDetach.classList.remove('hidden');
-  } else {
-    tabStatus.textContent = 'Not Attached';
-    tabStatus.className = 'status-value disconnected';
-    btnAttach.classList.remove('hidden');
-    btnDetach.classList.add('hidden');
+    attachBtn.style.display = 'inline-block';
+    detachBtn.style.display = 'none';
+    statusDiv.textContent = status.connected ? 'Connected to relay' : 'Disconnected';
+    statusDiv.className = '';
   }
 }
 
-btnAttach.addEventListener('click', async () => {
-  btnAttach.disabled = true;
-  hideMessage();
-  
-  try {
-    const response = await chrome.runtime.sendMessage({ action: 'attach' });
-    
-    if (response.success) {
-      showMessage('✓ Tab attached successfully!', 'success');
-      updateStatus();
-    } else if (response.error) {
-      showMessage(`✗ ${response.error}`, 'error');
+// Check current status
+function checkStatus() {
+  chrome.runtime.sendMessage({ action: 'status' }, (response) => {
+    if (chrome.runtime.lastError) {
+      statusDiv.textContent = '⚠ Extension error';
+      statusDiv.className = 'status-error';
+      return;
     }
-  } catch (e) {
-    showMessage(`✗ ${e.message}`, 'error');
-  } finally {
-    btnAttach.disabled = false;
-  }
+    updateUI(response || { attached: false, connected: false });
+  });
+}
+
+// Attach button handler
+attachBtn.addEventListener('click', () => {
+  attachBtn.disabled = true;
+  statusDiv.textContent = 'Connecting...';
+  
+  chrome.runtime.sendMessage({ action: 'attach' }, (response) => {
+    attachBtn.disabled = false;
+    
+    if (chrome.runtime.lastError) {
+      statusDiv.textContent = '⚠ ' + chrome.runtime.lastError.message;
+      statusDiv.className = 'status-error';
+      return;
+    }
+    
+    if (response?.success) {
+      statusDiv.textContent = '✓ Attached to tab';
+      statusDiv.className = 'status-attached';
+      attachBtn.style.display = 'none';
+      detachBtn.style.display = 'inline-block';
+    } else {
+      statusDiv.textContent = '⚠ ' + (response?.error || 'Unknown error');
+      statusDiv.className = 'status-error';
+    }
+  });
 });
 
-btnDetach.addEventListener('click', async () => {
-  btnDetach.disabled = true;
-  hideMessage();
+// Detach button handler
+detachBtn.addEventListener('click', () => {
+  detachBtn.disabled = true;
   
-  try {
-    const response = await chrome.runtime.sendMessage({ action: 'detach' });
+  chrome.runtime.sendMessage({ action: 'detach' }, (response) => {
+    detachBtn.disabled = false;
     
-    if (response.success) {
-      showMessage('✓ Tab detached', 'success');
-      updateStatus();
-    } else if (response.error) {
-      showMessage(`✗ ${response.error}`, 'error');
+    if (response?.success) {
+      statusDiv.textContent = 'Disconnected';
+      statusDiv.className = '';
+      attachBtn.style.display = 'inline-block';
+      detachBtn.style.display = 'none';
     }
-  } catch (e) {
-    showMessage(`✗ ${e.message}`, 'error');
-  } finally {
-    btnDetach.disabled = false;
-  }
+  });
 });
 
 // Initial status check
-updateStatus();
+checkStatus();

